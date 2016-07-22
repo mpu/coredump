@@ -1,0 +1,107 @@
+            The Life and Death of Objects
+
+Constructors in C++ are sloppy, failure is not really an
+option.  Exceptions allow failure but do not really seem
+to be a good answer.  Even worse, destructors really have
+no way to fail.
+
+It looks like C++ (and all other languages I know) lacks
+granularity around resource acquiring/release.  Maybe
+surprisingly resources often have a simple life pattern
+that typical system C code can handle relatively
+gracefully with gotos.  A few examples follow.
+
+* Memory pointers:
+
+    Null pointer --------------> Null pointer
+        v                            ^
+  Allocated memory ------------> Freed memory
+        v                            ^
+ Object Initilized ---------> Object Uninitialized
+
+
+* File descriptors:
+
+      -1 -----------------------> -1
+       v                           ^
+   open()'d -----------------> close()'d
+
+
+The typical way to handle these staged constructions/
+destructions in C is with goto's:
+
+	void f() {
+	  init_step1();
+	  if (error)
+	    goto deinit_step1;
+	  init_step2();
+	  if (error)
+	    goto deinit_step2;
+	  init_step3();
+	  if (error)
+	    goto deinit_step3;
+	  ...
+	deinit_step3:
+	  deinit_step3();
+	deinit_step2:
+	  deinit_step2();
+	deinit_step1:
+	  deinit_step1();
+	  return;
+	}
+
+It looks like a language based approach could do better
+and would be less error prone.
+
+Scribblings --------------------------------------------
+
+The obvious way that comes to my mind is some kind of
+phantom types solution where the compiler is allowed to
+insert code based on the "phantom" parameter.
+
+The different coercions to go from one state to another
+would be transitions of a little state machine and the
+compiler would look for paths in this state machine to
+know what code to insert.
+
+Any variable would have two special states (that could
+be same), called TOP and BOT, these two states stand
+for fully uninitialized (like, we don't even have the
+memory yet) to fully initialized.  Most functions will
+only accepts parameters fully initialized.
+
+The syntax to declare a variable of type "type" in
+state "state would look like:
+ 
+   var u : type.state
+   var v : type.state<foo>  /* for generic types */
+
+If "state" is not the initial state BOT, the compiler
+will look for transitions to take BOT to state and
+automatically insert their calls.  If state is the
+TOP state, it should be possible to omit it altogether.
+
+--------------
+
+states : T.
+  /* The initial state (BOT) is the one listed first,
+   * the default state (TOP) is the one listed last. */
+  ptr.( null | heap | stack
+      /* valid, below is the "union" of the states
+       * "heap" and "stack". */
+      | valid = heap + stack ) <T>;
+
+function alloc<T> (p: ptr<ptr.(null -> heap)<T>>)
+  -> bool
+{
+  var v = rawmem.alloc_heap(sizeof<T>());
+  if v == 0 { return false; }
+  #p = cast<ptr.heap<T>>(v);
+  return true;
+}
+
+var v : ptr.heap<int>  /* Should call alloc<int>
+                          implicitely. */
+
+/* Using #x should only be allowed if x has type
+ * ptr.valid<T>. */
