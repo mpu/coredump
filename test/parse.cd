@@ -1,0 +1,6 @@
+(* Parsing tests. *)
+
+function foo() { }
+function bar(x: int) { }
+function baz(p: ptr<int>) -> long { }
+function boo(n: ptr.null<int>) { }

@@ -1,0 +1,79 @@
+(* Depends on: Types *)
+
+#load "pa_extend.cmo" ;;
+
+open Types.Lang
+
+let g = Grammar.gcreate (Plexer.gmake ())
+
+let file: decl list Grammar.Entry.e = Grammar.Entry.create g "file"
+let expr: expr Grammar.Entry.e = Grammar.Entry.create g "expression"
+let decl: decl Grammar.Entry.e = Grammar.Entry.create g "declaration"
+let stmt: stmt Grammar.Entry.e = Grammar.Entry.create g "statement"
+let typ: typ Grammar.Entry.e = Grammar.Entry.create g "type"
+
+let parse_file filename ic =
+  (* Grammar.error_verbose := true; *)
+  try
+    Some (Grammar.Entry.parse file (Stream.of_channel ic))
+  with Ploc.Exc (loc, Stream.Error err) ->
+    Printf.eprintf "%s:%d:%d: Syntax error: %s\n"
+      filename
+      (Ploc.line_nb loc)
+      (Ploc.first_pos loc - Ploc.bol_pos loc)
+      err;
+    None
+
+EXTEND
+  GLOBAL: file expr decl stmt typ;
+  expr:
+    [ "+" LEFTA
+      [ e1 = SELF; "+"; e2 = SELF -> Ebinop (e1, BOadd, e2)
+      | e1 = SELF; "-"; e2 = SELF -> Ebinop (e1, BOsub, e2) ]
+    | "*" LEFTA
+      [ e1 = SELF; "*"; e2 = SELF -> Ebinop (e1, BOmul, e2)
+      | e1 = SELF; "/"; e2 = SELF -> Ebinop (e1, BOdiv, e2)
+      | e1 = SELF; "%"; e2 = SELF -> Ebinop (e1, BOrem, e2)
+      | e1 = SELF; "&"; e2 = SELF -> Ebinop (e1, BOand, e2)
+      | e1 = SELF; "|"; e2 = SELF -> Ebinop (e1, BOor,  e2)
+      | e1 = SELF; "^"; e2 = SELF -> Ebinop (e1, BOxor, e2) ]
+    | "base"
+      [ n = INT -> Enum (int_of_string n)
+      | v = LIDENT -> Evar v
+      | "true" -> Etrue
+      | "false" -> Efalse
+      | "("; e = expr; ")" -> e
+      | "-"; e = expr -> Ebinop (Enum 0, BOsub, e) ] ];
+  typ:
+    [ [ "void" -> Tvoid
+      | "int" -> Tint true
+      | "uint" -> Tint false
+      | "long" -> Tlong true
+      | "ulong" -> Tlong false
+      | t = LIDENT -> Tapp (t, None, [])
+      | t = LIDENT; "."; s = LIDENT -> Tapp (t, Some s, [])
+      | t = LIDENT; "<"; l = LIST1 typ SEP ","; ">" -> Tapp (t, None, l)
+      | t = LIDENT; "."; s = LIDENT; "<"; l = LIST1 typ SEP ","; ">" ->
+        Tapp (t, Some s, l) ] ];
+  scope:
+    [ [ "{"; "}" -> [] ]];
+  type_args:
+    [ [ l = LIST1 UIDENT SEP "," -> l ] ];
+  value_args:
+    [ [ l = LIST0 [ v = LIDENT; ":"; t = typ -> (v, t) ] SEP "," -> l ] ];
+  ret_type:
+    [ [ "->"; t = typ -> t | -> Tvoid ] ];
+  decl:
+    [ [ "function"; f = LIDENT; "<"; tas = type_args; ">"; "(";
+        vas = value_args; ")"; rty = ret_type; b = scope ->
+	(* Generic function. *)
+	Dfunction { f_name = f; f_type_args = tas; f_value_args = vas
+		  ; f_ret_type = rty ; f_body = b }
+      | "function"; f = LIDENT; "("; vas = value_args; ")"; rty = ret_type;
+        b = scope ->
+        (* Regular function. *)
+	Dfunction { f_name = f; f_type_args = []; f_value_args = vas
+	          ; f_ret_type = rty; f_body = b } ] ];
+  file:
+    [ [ l = LIST0 decl; EOI -> l ] ];
+END

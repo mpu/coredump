@@ -1,0 +1,4 @@
+coredump
+parser.ml
+*.cm[io]
+*.swp
