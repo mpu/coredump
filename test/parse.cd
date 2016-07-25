@@ -4,3 +4,21 @@ function foo() { }
 function bar(x: int) { }
 function baz(p: ptr<int>) -> long { }
 function boo(n: ptr.null<int>) { }
+function snd<T, U>(a: T, b: U) -> U { }
+function get<T> (p: ptr<T>) -> T { }
+
+function mk<T> (x: T) -> ptr.heap<T> {
+  (* We effectiviely want the caller to move into
+   * the argument.  The object will change location,
+   * there are no copies here. *)
+}
+
+function foo(x: int) {
+  var a;
+  var b = 0;
+  var c: int;
+  var d: int = 0;
+
+  x = x + (1 - d) * 5;
+  return b;
+}

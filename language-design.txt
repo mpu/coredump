@@ -1,0 +1,122 @@
+# Key ideas
+- Types have states that represent the initialization status of the data.
+- The compiler can insert functions it gets from traits-like definitions
+  to change the initialization level of a piece of data.
+- Aggregates default to being in the least-upper bound of the initialization
+  state of their members.
+- Maybe runtime checks for initialization levels would be nice (GADT style).
+- Arrays are complicated.  Maybe handle them with slices.
+- Move semantics act on the initialization level of variables.
+- Being a POD is equivalent to having only one initialization level.
+- References.
+
+# Major questions: Arrays, borrowing (and its checks).
+Should we have runtime checks to discriminate to a given type state?
+
+# Borrowing
+What can be done with a simple borrowed variable?
+- It can be borrowed again.
+- It can be mutated.  (Can its type change?)
+- It must not be moved from.
+
+Borrows for memory guarantee that memory is not freed.
+T& is a borrow pointer.  This means that whatever object it "points" to will
+still belong to the lender at the end of the scope.
+Can borrowing be simply a way to pass a handle to a function without having to
+explicitly thread it through (in the return value)?
+
+Can we distinguish between references that mutate and the ones that don't or
+only change the type?  This would be handy as we would not have to pass a
+pointer but rather the value instead. For example '&T' and 'mutable &T'.
+For example, freeing a pointer with 'free()' only requires the value of the
+pointer, but it changes its type state from 'heap', to 'null'.
+
+Can borrow references appear in the middle of types?  I'd think no.
+
+Is borrowing needed?
+
+Maybe not for pointers (that have linear semantics), but for references, it
+looks like we do need borrow checks (see below).
+
+Borrowing references are also used in Rust to return a "pointer" to an element
+of a data-structure.  This is definitely a desirable feature.  I might not have
+considered it so far because I only thought of downward borrowing, from caller
+to callee, this is a trivial case since the objects of the caller will always
+outlive the objects of the callee.
+
+function foo() {
+  var dummy = 0;
+  var r = mutable &dummy;
+  {
+    var x = 0;
+    r = mutable &x;
+    (* Should we allow reference assignments?  If not, we can drop the '*'
+     * syntax, but it makes things a bit less explicit.  This would also make
+     * sure that they cannot outlive the scope of the objects they point to. *)
+  }
+  *r = 42; (* bug *)
+}
+
+var v: int;
+struct foobar { foo: int, bar: int };
+function foo(fb: &foobar) -> &int {
+  return &fb.foo;
+  (* If we return &v instead, the whole program is valid. *)
+}
+function bar() -> &int {
+  var fb: foobar;
+  return foo(&fb); (* bug *)
+  (* Return allows to move an object from an inner scope to an outer one.  A
+   * naive type-checker could accept the following code. *)
+}
+
+To prevent the previous example from incorrectly type-checking, we seem to need
+extra annotation to relate the lifetime of the return value and the lifetime of
+the function arguments.
+
+# Aggregates
+Only structs to start.  They are values.  Defining one defaults with two states:
+the fully initialized state and the fully uninitialized.  For that to work, we
+need a way to assign all fields at the same time.
+
+struct pair_ptr<T, U> { fst: ptr<T>, snd: ptr<U> };
+
+function pair_ptr_init<T, U>
+
+  (* We really need 'bot -> top' here, because this specifies what to do with
+   * the overwritten 'p'.  If the value overwritten is not of bottom kind, the
+   * compiler will have to insert the necessary coercions to make it bottom. *)
+
+  (p: mutable &pair_ptr.(bot -> top)<T, U>, ptr<T> pt, ptr<U> pu) -> void
+{
+  p = pair_ptr<T, U>{ pt, pu }
+}
+
+It looks like a DSL to define states would be nice for aggregates.  One way to
+say that the aggregate is in state 'foo' if such and such fields are at least in
+state 'bar'.  The compiler could then generate the transition functions itself.
+
+Being able to give multiple types and names to a function might be useful to
+avoid redundant code.  Underloading...
+
+It is essential to be able to take references of fields, since the compiler has
+to do so to run the initialization functions for fields of aggregates.
+
+What happens when we "take the address" of a field.  By linearity of pointers
+(there is only one pointer to a piece of memory), it should be a reference.
+This means that we have to make sure that the reference does not outlive the
+object it belongs to.  On the type side of things, the type of the aggregate
+must exacly specify the state of its members, so we know what type to return.
+
+# Arrays
+No pointer arithmetic, only slices.
+
+# Type-checking
+Does not look like HM, no need for implicit generalization, all annotations
+should say everything.  Inference however would be useful.  Nice type errors
+would be very nice.
+The innovation is type-states, it looks like it is a simple data-flow analysis.
+Fixpoint must be reached after only one round.  It is unclear if the states
+have to form a rich lattice, or if a simple order would work.
+I thought a complete order would be useful to disambiguate whatever code the
+compiler has to insert.

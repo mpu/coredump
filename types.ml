@@ -15,6 +15,7 @@ module Lang = struct
     | Tbool
     | Tint of bool  (* signed or not *)
     | Tlong of bool (* signed or not *)
+    | Tvar of string
     | Tapp of string * string option * typ list
 
   type lval = string
@@ -22,7 +23,9 @@ module Lang = struct
   type scope = stmt list
   and stmt =
     | Sempty
+    | Svar of string * typ option * expr option
     | Sassign of lval * expr
+    | Sreturn of expr
 
   type func_decl =
     { f_name: string; f_type_args: string list

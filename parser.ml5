@@ -50,19 +50,31 @@ EXTEND
       | "uint" -> Tint false
       | "long" -> Tlong true
       | "ulong" -> Tlong false
+      | v = UIDENT -> Tvar v
       | t = LIDENT -> Tapp (t, None, [])
       | t = LIDENT; "."; s = LIDENT -> Tapp (t, Some s, [])
       | t = LIDENT; "<"; l = LIST1 typ SEP ","; ">" -> Tapp (t, None, l)
       | t = LIDENT; "."; s = LIDENT; "<"; l = LIST1 typ SEP ","; ">" ->
         Tapp (t, Some s, l) ] ];
+  lval:
+    [ [ v = LIDENT -> v ] ];
+  stmt:
+    [ [ lv = lval; "="; e = expr; ";" -> Sassign (lv, e)
+      | "var"; v = LIDENT; ";" -> Svar (v, None, None)
+      | "var"; v = LIDENT; ":"; t = typ; ";" -> Svar (v, Some t, None)
+      | "var"; v = LIDENT; "="; e = expr; ";" -> Svar (v, None, Some e)
+      | "var"; v = LIDENT; ":"; t = typ; "="; e = expr; ";" ->
+        Svar (v, Some t, Some e)
+      | "return"; e = expr; ";" -> Sreturn e ] ];
   scope:
-    [ [ "{"; "}" -> [] ]];
+    [ [ "{"; l = LIST0 stmt; "}" -> l ] ];
   type_args:
     [ [ l = LIST1 UIDENT SEP "," -> l ] ];
   value_args:
     [ [ l = LIST0 [ v = LIDENT; ":"; t = typ -> (v, t) ] SEP "," -> l ] ];
   ret_type:
-    [ [ "->"; t = typ -> t | -> Tvoid ] ];
+    [ [ "->"; t = typ -> t
+      | (* Default to void. *) -> Tvoid ] ];
   decl:
     [ [ "function"; f = LIDENT; "<"; tas = type_args; ">"; "(";
         vas = value_args; ")"; rty = ret_type; b = scope ->
